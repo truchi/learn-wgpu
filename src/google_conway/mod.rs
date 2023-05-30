@@ -24,6 +24,31 @@ use winit::{
     window::{Window, WindowBuilder},
 };
 
+const FRAME: Duration = Duration::from_millis(200);
+
+const PROBABILITY: f64 = 0.6;
+
+const GRID_SIZE: u32 = 32;
+
+const CLEAR: Color = Color {
+    r: 0.0,
+    g: 0.0,
+    b: 0.0,
+    a: 1.0,
+};
+
+const VERTICES: &[f32] = &[
+    // X, Y
+    -0.8, -0.8, // Triangle 1 (Blue)
+    0.8, -0.8, //
+    0.8, 0.8, //
+    -0.8, -0.8, // Triangle 2 (Red)
+    0.8, 0.8, //
+    -0.8, 0.8, //
+];
+
+const WORKGROUP: usize = 8;
+
 fn default<T: Default>() -> T {
     T::default()
 }
@@ -65,14 +90,12 @@ pub fn main() {
             }
         }
         Event::MainEventsCleared => {
-            // RedrawRequested will only trigger once, unless we manually
-            // request it.
             state.window().request_redraw();
         }
         Event::RedrawRequested(window_id) if window_id == state.window().id() => {
             let now = Instant::now();
 
-            if now - last_redraw > Duration::from_millis(500) {
+            if now - last_redraw > FRAME {
                 last_redraw = now;
 
                 state.update();
@@ -87,27 +110,6 @@ pub fn main() {
 }
 
 // =================================================================================================
-
-const WORKGROUP: usize = 8;
-
-const CLEAR: Color = Color {
-    r: 0.0,
-    g: 0.0,
-    b: 0.0,
-    a: 1.0,
-};
-
-const GRID_SIZE: u32 = 32;
-
-const VERTICES: &[f32] = &[
-    // X, Y
-    -0.8, -0.8, // Triangle 1 (Blue)
-    0.8, -0.8, //
-    0.8, 0.8, //
-    -0.8, -0.8, // Triangle 2 (Red)
-    0.8, 0.8, //
-    -0.8, 0.8, //
-];
 
 struct State {
     window: Window,
@@ -173,20 +175,30 @@ impl State {
 
         // Cell activation storage buffers
         let activation_storages = {
-            let activation_storage = |modulo| {
+            let initial = {
+                use rand::{thread_rng, Rng};
+
+                let mut rng = thread_rng();
+                let mut initial = vec![0; GRID_SIZE as usize * GRID_SIZE as usize];
+
+                for i in 0..initial.len() {
+                    if rng.gen_bool(PROBABILITY) {
+                        initial[i] = 1;
+                    }
+                }
+
+                initial
+            };
+
+            let activation_storage = || {
                 device.create_buffer_init(&BufferInitDescriptor {
                     label: Some("Activation storage"),
-                    contents: bytemuck::cast_slice(
-                        (0..GRID_SIZE * GRID_SIZE)
-                            .into_iter()
-                            .map(|i| if i % modulo == 0 { 1 } else { 0 })
-                            .collect::<Vec<u32>>()
-                            .as_slice(),
-                    ),
+                    contents: bytemuck::cast_slice(initial.as_slice()),
                     usage: BufferUsages::STORAGE,
                 })
             };
-            [activation_storage(1), activation_storage(2)]
+
+            [activation_storage(), activation_storage()]
         };
 
         // Bind groups
@@ -234,7 +246,7 @@ impl State {
             ],
         });
         let bind_groups = {
-            let bind_group = |activation1, activation2| {
+            let bind_group = |i, j| {
                 device.create_bind_group(&BindGroupDescriptor {
                     label: Some("Cell bind group"),
                     layout: &bind_group_layout,
@@ -252,7 +264,7 @@ impl State {
                         BindGroupEntry {
                             binding: 1,
                             resource: BindingResource::Buffer(BufferBinding {
-                                buffer: activation1,
+                                buffer: &activation_storages[i],
                                 offset: default(),
                                 size: default(),
                             }),
@@ -261,7 +273,7 @@ impl State {
                         BindGroupEntry {
                             binding: 2,
                             resource: BindingResource::Buffer(BufferBinding {
-                                buffer: activation2,
+                                buffer: &activation_storages[j],
                                 offset: default(),
                                 size: default(),
                             }),
@@ -269,10 +281,7 @@ impl State {
                     ],
                 })
             };
-            [
-                bind_group(&activation_storages[0], &activation_storages[1]),
-                bind_group(&activation_storages[1], &activation_storages[0]),
-            ]
+            [bind_group(0, 1), bind_group(1, 0)]
         };
 
         // Shaders and pipelines
@@ -358,7 +367,7 @@ impl State {
             compute_pass.dispatch_workgroups(
                 (GRID_SIZE as f32 / WORKGROUP as f32).ceil() as u32,
                 (GRID_SIZE as f32 / WORKGROUP as f32).ceil() as u32,
-                0,
+                1,
             );
         }
 

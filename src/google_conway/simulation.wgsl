@@ -5,13 +5,35 @@
 @compute
 @workgroup_size(8, 8)
 fn compute_main(@builtin(global_invocation_id) cell: vec3<u32>) {
-    if (in[cell_index(cell.xy)] == u32(1)) {
-        out[cell_index(cell.xy)] = u32(0);
-    } else {
-        out[cell_index(cell.xy)] = u32(1);
+    let active_neighbors =
+        cell_active(cell.x + 1u, cell.y + 1u) +
+        cell_active(cell.x + 1u, cell.y     ) +
+        cell_active(cell.x + 1u, cell.y - 1u) +
+        cell_active(cell.x     , cell.y - 1u) +
+        cell_active(cell.x - 1u, cell.y - 1u) +
+        cell_active(cell.x - 1u, cell.y     ) +
+        cell_active(cell.x - 1u, cell.y + 1u) +
+        cell_active(cell.x     , cell.y + 1u);
+
+    let i = cell_index(cell.xy);
+
+    switch active_neighbors {
+        case 2u: {
+            out[i] = in[i];
+        }
+        case 3u: {
+            out[i] = 1u;
+        }
+        default: {
+            out[i] = 0u;
+        }
     }
 }
 
 fn cell_index(cell: vec2<u32>) -> u32 {
-    return cell.y * u32(grid.x) + cell.x;
+    return (cell.y % u32(grid.y)) * u32(grid.x) + (cell.x % u32(grid.x));
+}
+
+fn cell_active(x: u32, y: u32) -> u32 {
+    return in[cell_index(vec2(x, y))];
 }
