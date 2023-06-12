@@ -149,9 +149,16 @@ impl State {
         };
         surface.configure(&device, &config);
 
-        let diffuse_image = image::load_from_memory(include_bytes!("picachu.png")).unwrap();
-        let diffuse_rgba = diffuse_image.to_rgba8();
-        let dimensions = image::GenericImageView::dimensions(&diffuse_image);
+        const IMAGE: &[u8] = &[
+            255, 0, 255, // 
+            0, 255, 0, //
+            0, 0, 255, //
+        ];
+
+        // let diffuse_image = image::load_from_memory(include_bytes!("picachu.png")).unwrap();
+        // let diffuse_rgba = diffuse_image.to_rgba8();
+        // let dimensions = image::GenericImageView::dimensions(&diffuse_image);
+        let dimensions = (3, 3);
         let texture_size = wgpu::Extent3d {
             width: dimensions.0,
             height: dimensions.1,
@@ -165,7 +172,8 @@ impl State {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             // Most images are stored using sRGB so we need to reflect that here.
-            format: wgpu::TextureFormat::Rgba8UnormSrgb,
+            // format: wgpu::TextureFormat::Rgba8UnormSrgb,
+            format: wgpu::TextureFormat::R8Unorm,
             // TEXTURE_BINDING tells wgpu that we want to use this texture in shaders
             // COPY_DST means that we want to copy data to this texture
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
@@ -188,11 +196,17 @@ impl State {
                 aspect: wgpu::TextureAspect::All,
             },
             // The actual pixel data
-            &diffuse_rgba,
+            // &diffuse_rgba,
+            IMAGE,
             // The layout of the texture
+            // wgpu::ImageDataLayout {
+            //     offset: 0,
+            //     bytes_per_row: std::num::NonZeroU32::new(4 * dimensions.0),
+            //     rows_per_image: std::num::NonZeroU32::new(dimensions.1),
+            // },
             wgpu::ImageDataLayout {
                 offset: 0,
-                bytes_per_row: std::num::NonZeroU32::new(4 * dimensions.0),
+                bytes_per_row: std::num::NonZeroU32::new(dimensions.0),
                 rows_per_image: std::num::NonZeroU32::new(dimensions.1),
             },
             texture_size,
@@ -205,7 +219,8 @@ impl State {
             address_mode_u: wgpu::AddressMode::ClampToEdge,
             address_mode_v: wgpu::AddressMode::ClampToEdge,
             address_mode_w: wgpu::AddressMode::ClampToEdge,
-            mag_filter: wgpu::FilterMode::Linear,
+            // mag_filter: wgpu::FilterMode::Linear,
+            mag_filter: wgpu::FilterMode::Nearest,
             min_filter: wgpu::FilterMode::Nearest,
             mipmap_filter: wgpu::FilterMode::Nearest,
             ..Default::default()
@@ -393,7 +408,7 @@ impl State {
 
 // =================================================================================================
 
-const VERTICES: &[Vertex] = &[
+const VERTICES2: &[Vertex] = &[
     Vertex {
         position: [-0.0868241, 0.49240386, 0.0],
         tex_coords: [0.4131759, 0.00759614],
@@ -416,7 +431,31 @@ const VERTICES: &[Vertex] = &[
     }, // E
 ];
 
-const INDICES: &[u16] = &[0, 1, 4, 1, 2, 4, 2, 3, 4];
+//              ^
+//      A       |      B
+//   ---------------------->
+//      D       |      C
+//              
+const VERTICES: &[Vertex] = &[
+    Vertex {
+        position: [-0.9, 0.9, 0.0],
+        tex_coords: [0.0, 0.0],
+    }, // A
+    Vertex {
+        position: [0.9, 0.9, 0.0],
+        tex_coords: [1.0, 0.0],
+    }, // B
+    Vertex {
+        position: [0.9, -0.9, 0.0],
+        tex_coords: [1.0, 1.0],
+    }, // C
+    Vertex {
+        position: [-0.9, -0.9, 0.0],
+        tex_coords: [0.0, 1.0],
+    }, // D
+];
+
+const INDICES: &[u16] = &[2, 1, 0, 0, 3, 2];
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
